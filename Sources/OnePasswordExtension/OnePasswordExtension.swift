@@ -59,6 +59,7 @@ public typealias OnePasswordLoginDictionaryCompletionBlock = (NSDictionary?, NSE
 public typealias OnePasswordSuccessCompletionBlock = (Bool, NSError?) -> Void
 public typealias OnePasswordExtensionItemCompletionBlock = (NSExtensionItem?, NSError?) -> Void
 
+@objcMembers
 public final class OnePasswordExtension: NSObject {
 	
 	private static let sharedExtension = OnePasswordExtension()
