@@ -61,7 +61,11 @@ public typealias OnePasswordExtensionItemCompletionBlock = (NSExtensionItem?, NS
 
 public final class OnePasswordExtension: NSObject {
 	
-	public static let sharedExtension = OnePasswordExtension()
+	private static let sharedExtension = OnePasswordExtension()
+	
+	public static func shared() -> OnePasswordExtension {
+		OnePasswordExtension.sharedExtension
+	}
 	
 	private override init() {
 		
