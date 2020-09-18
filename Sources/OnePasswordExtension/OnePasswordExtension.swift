@@ -6,7 +6,7 @@ import UIKit
 import WebKit
 #endif
 
-
+@objc
 @objcMembers
 public final class OnePasswordExtension: NSObject {
 	// MARK: - Login Dictionary keys - Used to get or set the properties of a 1Password Login
@@ -32,7 +32,7 @@ public final class OnePasswordExtension: NSObject {
 	// MARK: - Error Codes
 	public static let errorDomain = "OnePasswordExtension"
 	
-	@objc
+	@objc(OnePasswordExtensionErrorCode)
 	public enum ErrorCode: Int {
 		case cancelledByUser = 0
 		case apiNotAvailable = 1
