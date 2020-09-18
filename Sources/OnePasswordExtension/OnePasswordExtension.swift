@@ -103,6 +103,7 @@ public final class OnePasswordExtension: NSObject {
 	 
 	 @param completion A completion block called with two parameters loginDictionary and error once completed. The loginDictionary reply parameter that contains the username, password and the One-Time Password if available. The error Reply parameter that is nil if the 1Password Extension has been successfully completed, or it contains error information about the completion failure.
 	 */
+	@objc(findLoginForURLString:forViewController:sender:completion:)
 	public func findLogin(forURLString URLString: String, for viewController: UIViewController, sender: Any?, completion: OnePasswordLoginDictionaryCompletionBlock? = nil) {
 		precondition(URLString.isEmpty == false, "URLString must not be nil")
 
