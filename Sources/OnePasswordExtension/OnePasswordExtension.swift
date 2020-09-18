@@ -63,6 +63,7 @@ public final class OnePasswordExtension: NSObject {
 	
 	private static let sharedExtension = OnePasswordExtension()
 	
+	@objc(sharedExtension)
 	public static func shared() -> OnePasswordExtension {
 		OnePasswordExtension.sharedExtension
 	}
