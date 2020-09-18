@@ -106,7 +106,6 @@ public final class OnePasswordExtension: NSObject {
 	 */
 	@objc(findLoginForURLString:forViewController:sender:completion:)
 	public func findLogin(forURLString URLString: String, for viewController: UIViewController, sender: Any?, completion: OnePasswordLoginDictionaryCompletionBlock? = nil) {
-		precondition(URLString.isEmpty == false, "URLString must not be nil")
 
 		guard isSystemAppExtensionAPIAvailable() else {
 			NSLog("Failed to findLoginForURLString, system API is not available")
