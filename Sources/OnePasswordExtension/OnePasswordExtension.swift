@@ -32,7 +32,8 @@ public final class OnePasswordExtension: NSObject {
 	// MARK: - Error Codes
 	public static let AppExtensionErrorDomain = "OnePasswordExtension"
 	
-	public enum AppExtensionErrorCode : Int {
+	@objc(AppExtensionErrorCode)
+	public enum ErrorCode : Int {
 		case cancelledByUser = 0
 		case apiNotAvailable = 1
 		case failedToContactExtension = 2
@@ -413,7 +414,7 @@ public final class OnePasswordExtension: NSObject {
 			let collectedPageDetails = try JSONSerialization.jsonObject(with: data, options: .mutableContainers) as? NSDictionary
 			
 			guard let collectedPageDetailsDictionaryTemp = collectedPageDetails else {
-				throw NSError(domain: OnePasswordExtension.AppExtensionErrorDomain, code: AppExtensionErrorCode.unexpectedData.rawValue, userInfo: [NSLocalizedDescriptionKey : "Failed to parse JSON collected page details."])
+				throw NSError(domain: OnePasswordExtension.AppExtensionErrorDomain, code: ErrorCode.unexpectedData.rawValue, userInfo: [NSLocalizedDescriptionKey : "Failed to parse JSON collected page details."])
 			}
 			
 			collectedPageDetailsDictionary = collectedPageDetailsDictionaryTemp
@@ -471,7 +472,7 @@ public final class OnePasswordExtension: NSObject {
 		webView.evaluateJavaScript(OnePasswordExtension.OPWebViewCollectFieldsScript) { (result, error) in
 			guard let result = result as? String,
 						let webKitURL = webView.url?.absoluteString else {
-				let completionError = (error as NSError?) ?? NSError(domain: OnePasswordExtension.AppExtensionErrorDomain, code: AppExtensionErrorCode.collectFieldsScriptFailed.rawValue, userInfo: nil)
+				let completionError = (error as NSError?) ?? NSError(domain: OnePasswordExtension.AppExtensionErrorDomain, code: ErrorCode.collectFieldsScriptFailed.rawValue, userInfo: nil)
 				completion(false,
 									 OnePasswordExtension.failedToCollectFieldsErrorWithUnderlyingError(underlyingError: completionError))
 				return
@@ -510,7 +511,7 @@ public final class OnePasswordExtension: NSObject {
 	private func processExtensionItem(_ extensionItem: NSExtensionItem?, completion: @escaping OnePasswordLoginDictionaryCompletionBlock) {
 		guard let extensionItem = extensionItem, extensionItem.attachments?.isEmpty == false else {
 			let userInfo = [ NSLocalizedDescriptionKey : "Unexpected data returned by App Extension: extension item had no attachments." ]
-			let error = NSError(domain: OnePasswordExtension.AppExtensionErrorDomain, code: AppExtensionErrorCode.unexpectedData.rawValue, userInfo: userInfo)
+			let error = NSError(domain: OnePasswordExtension.AppExtensionErrorDomain, code: ErrorCode.unexpectedData.rawValue, userInfo: userInfo)
 			completion(nil, error)
 			return
 		}
@@ -518,7 +519,7 @@ public final class OnePasswordExtension: NSObject {
 		let itemProvider = extensionItem.attachments?.first
 		guard itemProvider?.hasItemConformingToTypeIdentifier(kUTTypePropertyList as String) != nil else {
 			let userInfo = [ NSLocalizedDescriptionKey: "Unexpected data returned by App Extension: extension item attachment does not conform to kUTTypePropertyList type identifier" ]
-			let error = NSError(domain: OnePasswordExtension.AppExtensionErrorDomain, code: AppExtensionErrorCode.unexpectedData.rawValue, userInfo: userInfo)
+			let error = NSError(domain: OnePasswordExtension.AppExtensionErrorDomain, code: ErrorCode.unexpectedData.rawValue, userInfo: userInfo)
 			completion(nil, error)
 			return
 		}
@@ -569,7 +570,7 @@ public final class OnePasswordExtension: NSObject {
 		
 		guard let data = webPageDetails.data(using: .utf8) else {
 			NSLog("Failed to parse JSON collected page details")
-			let error = NSError(domain: OnePasswordExtension.AppExtensionErrorDomain, code: AppExtensionErrorCode.unexpectedData.rawValue, userInfo: [NSLocalizedDescriptionKey : "Failed to get data"])
+			let error = NSError(domain: OnePasswordExtension.AppExtensionErrorDomain, code: ErrorCode.unexpectedData.rawValue, userInfo: [NSLocalizedDescriptionKey : "Failed to get data"])
 			completion?(nil, error)
 			return
 		}
@@ -579,7 +580,7 @@ public final class OnePasswordExtension: NSObject {
 			let webPageDetails = try JSONSerialization.jsonObject(with: data, options: .mutableContainers)
 			
 			guard let webPageDetailsDictionaryTemp = webPageDetails as? NSDictionary else {
-				let error = NSError(domain: OnePasswordExtension.AppExtensionErrorDomain, code: AppExtensionErrorCode.unexpectedData.rawValue, userInfo: [NSLocalizedDescriptionKey : "Failed to get data"])
+				let error = NSError(domain: OnePasswordExtension.AppExtensionErrorDomain, code: ErrorCode.unexpectedData.rawValue, userInfo: [NSLocalizedDescriptionKey : "Failed to get data"])
 				throw error
 			}
 			
@@ -609,7 +610,7 @@ public final class OnePasswordExtension: NSObject {
 	
 	private static func systemAppExtensionAPINotAvailableError() -> NSError {
 		NSError(domain: AppExtensionErrorDomain,
-						code: AppExtensionErrorCode.apiNotAvailable.rawValue,
+						code: ErrorCode.apiNotAvailable.rawValue,
 						userInfo: [NSLocalizedDescriptionKey
 												: NSLocalizedString("App Extension API is not available in this version of iOS",
 																						tableName: "OnePasswordExtension",
@@ -618,7 +619,7 @@ public final class OnePasswordExtension: NSObject {
 	
 	private static func extensionCancelledByUserError() -> NSError {
 		NSError(domain: AppExtensionErrorDomain,
-						code: AppExtensionErrorCode.cancelledByUser.rawValue,
+						code: ErrorCode.cancelledByUser.rawValue,
 						userInfo: [NSLocalizedDescriptionKey
 												: NSLocalizedString("1Password Extension was cancelled by the user",
 																						tableName: "OnePasswordExtension",
@@ -627,7 +628,7 @@ public final class OnePasswordExtension: NSObject {
 	
 	private static func failedToContactExtensionErrorWithActivityError(activityError: NSError) -> NSError {
 		NSError(domain: AppExtensionErrorDomain,
-						code: AppExtensionErrorCode.failedToContactExtension.rawValue,
+						code: ErrorCode.failedToContactExtension.rawValue,
 						userInfo: [NSLocalizedDescriptionKey
 												: NSLocalizedString("Failed to contact the 1Password Extension",
 																						tableName: "OnePasswordExtension",
@@ -637,7 +638,7 @@ public final class OnePasswordExtension: NSObject {
 	
 	private static func failedToCollectFieldsErrorWithUnderlyingError(underlyingError: NSError) -> NSError {
 		NSError(domain: AppExtensionErrorDomain,
-						code: AppExtensionErrorCode.collectFieldsScriptFailed.rawValue,
+						code: ErrorCode.collectFieldsScriptFailed.rawValue,
 						userInfo: [NSLocalizedDescriptionKey
 												: NSLocalizedString("Failed to execute script that collects web page information",
 																						tableName: "OnePasswordExtension",
@@ -647,7 +648,7 @@ public final class OnePasswordExtension: NSObject {
 	
 	private static func failedToFillFieldsErrorWithLocalizedErrorMessage(errorMessage: String, underlyingError: NSError?) -> NSError {
 		NSError(domain: AppExtensionErrorDomain,
-						code: AppExtensionErrorCode.fillFieldsScriptFailed.rawValue,
+						code: ErrorCode.fillFieldsScriptFailed.rawValue,
 						userInfo: {
 							var userInfo: [String: Any] = [
 								NSLocalizedDescriptionKey
@@ -663,7 +664,7 @@ public final class OnePasswordExtension: NSObject {
 	
 	private static func failedToLoadItemProviderDataErrorWithUnderlyingError(underlyingError: NSError?) -> NSError {
 		NSError(domain: AppExtensionErrorDomain,
-						code: AppExtensionErrorCode.failedToLoadItemProviderData.rawValue,
+						code: ErrorCode.failedToLoadItemProviderData.rawValue,
 						userInfo: [NSLocalizedDescriptionKey
 												: NSLocalizedString("Failed to parse information returned by 1Password Extension",
 																						tableName: "OnePasswordExtension",
@@ -673,7 +674,7 @@ public final class OnePasswordExtension: NSObject {
 	
 	private static func failedToObtainURLStringFromWebViewError() -> NSError {
 		NSError(domain: AppExtensionErrorDomain,
-						code: AppExtensionErrorCode.failedToObtainURLStringFromWebView.rawValue,
+						code: ErrorCode.failedToObtainURLStringFromWebView.rawValue,
 						userInfo: [NSLocalizedDescriptionKey
 												: NSLocalizedString("Failed to obtain URL String from web view. The web view must be loaded completely when calling the 1Password Extension",
 																						tableName: "OnePasswordExtension",
