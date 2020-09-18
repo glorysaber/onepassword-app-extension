@@ -41,6 +41,7 @@ enum AppExtensionErrorCode : Int {
 }
 
 //version
+let VERSION_NUMBER = 185
 private let AppExtensionVersionNumberKey = "version_number"
 
 // Available App Extension Actions
@@ -54,20 +55,13 @@ private let kUTTypeAppExtensionFillBrowserAction = "org.appextension.fill-browse
 private let AppExtensionWebViewPageFillScript = "fillScript"
 private let AppExtensionWebViewPageDetails = "pageDetails"
 
-public typealias OnePasswordLoginDictionaryCompletionBlock = ([AnyHashable : Any]?, Error?) -> Void
-public typealias OnePasswordSuccessCompletionBlock = (Bool, Error?) -> Void
-public typealias OnePasswordExtensionItemCompletionBlock = (NSExtensionItem?, Error?) -> Void
+public typealias OnePasswordLoginDictionaryCompletionBlock = (NSDictionary?, NSError?) -> Void
+public typealias OnePasswordSuccessCompletionBlock = (Bool, NSError?) -> Void
+public typealias OnePasswordExtensionItemCompletionBlock = (NSExtensionItem?, NSError?) -> Void
 
-
-
-
-
-
-
-
-final class OnePasswordExtension: NSObject {
+public final class OnePasswordExtension: NSObject {
 	
-	static let sharedExtension = OnePasswordExtension()
+	public static let sharedExtension = OnePasswordExtension()
 	
 	private override init() {
 		
@@ -104,17 +98,43 @@ final class OnePasswordExtension: NSObject {
 	 @param completion A completion block called with two parameters loginDictionary and error once completed. The loginDictionary reply parameter that contains the username, password and the One-Time Password if available. The error Reply parameter that is nil if the 1Password Extension has been successfully completed, or it contains error information about the completion failure.
 	 */
 	public func findLogin(forURLString URLString: String, for viewController: UIViewController, sender: Any?, completion: OnePasswordLoginDictionaryCompletionBlock? = nil) {
-//		precondition(URLString.isEmpty == false, "URLString must not be nil")
-//
-//		guard isSystemAppExtensionAPIAvailable else {
-//			NSLog("Failed to findLoginForURLString, system API is not available")
-//			completion?(nil, OnePasswordExtension.systemAppExtensionAPINotAvailableError)
-//			return
-//		}
-//
-//		let item = { AppExtensionVersionNumberKey: VERSION_NUMBER, AppExtensionURLStringKey: URLString }
-//
-//		let activityViewController = activityViewController
+		precondition(URLString.isEmpty == false, "URLString must not be nil")
+
+		guard isSystemAppExtensionAPIAvailable() else {
+			NSLog("Failed to findLoginForURLString, system API is not available")
+			completion?(nil, OnePasswordExtension.systemAppExtensionAPINotAvailableError())
+			return
+		}
+
+		let item: NSDictionary = [AppExtensionVersionNumberKey: VERSION_NUMBER, AppExtensionURLStringKey: URLString]
+
+		guard let activityViewController = self.activityViewController(forItem: item, viewController: viewController, sender: sender, typeIdentifier: kUTTypeAppExtensionFindLoginAction) else {
+			NSLog("Failed to get activityViewController")
+			completion?(nil, OnePasswordExtension.extensionCancelledByUserError())
+			return
+		}
+		
+		activityViewController.completionWithItemsHandler = { activityType, completed, returnedItems, activityError in
+			guard let returnedItems = returnedItems, returnedItems.isEmpty == false else {
+				let error: NSError
+				if let activityError = activityError as NSError? {
+					NSLog("Failed to storeLoginForURLString: \(activityError)")
+					error = OnePasswordExtension.failedToContactExtensionErrorWithActivityError(activityError: activityError)
+				} else {
+					error = OnePasswordExtension.extensionCancelledByUserError()
+				}
+				
+				completion?(nil, error)
+				return
+			}
+			
+			self.processExtensionItem(returnedItems.first as? NSExtensionItem) { (itemDictionary, error) in
+				completion?(itemDictionary, error)
+			}
+			
+		}
+		
+		viewController.present(activityViewController, animated: true, completion: nil)
 	}
 	
 	// MARK: - New User Registration
@@ -138,7 +158,50 @@ final class OnePasswordExtension: NSObject {
 	 
 	 @param completion A completion block which is called with type parameters loginDictionary and error. The loginDictionary reply parameter which contain all the information about the newly saved Login. Use the `Login Dictionary keys` above to extract the needed information and update your UI. For example, updating the UI with the newly generated password lets the user know their action was successful. The error reply parameter that is nil if the 1Password Extension has been successfully completed, or it contains error information about the completion failure.
 	 */
-	public func storeLogin(forURLString URLString: String, loginDetails loginDetailsDictionary: [AnyHashable : Any]?, passwordGenerationOptions: [AnyHashable : Any]?, for viewController: UIViewController, sender: Any?, completion: OnePasswordLoginDictionaryCompletionBlock) {
+	public func storeLogin(forURLString URLString: String, loginDetails loginDetailsDictionary: [AnyHashable : Any], passwordGenerationOptions: [AnyHashable : Any]?, for viewController: UIViewController, sender: Any?, completion: OnePasswordLoginDictionaryCompletionBlock? = nil) {
+		
+		guard isSystemAppExtensionAPIAvailable() else {
+			NSLog("Failed to changePasswordForLoginWithUsername, system API is not available")
+			completion?(nil, OnePasswordExtension.systemAppExtensionAPINotAvailableError())
+			return
+		}
+		
+		let newLoginAttributesDict = NSMutableDictionary()
+		newLoginAttributesDict[AppExtensionVersionNumberKey] = VERSION_NUMBER
+		newLoginAttributesDict[AppExtensionURLStringKey] = URLString
+		newLoginAttributesDict.addEntries(from: loginDetailsDictionary)
+		
+		if let passwordGenerationOptions = passwordGenerationOptions, passwordGenerationOptions.isEmpty == false {
+			newLoginAttributesDict[AppExtensionPasswordGeneratorOptionsKey] = passwordGenerationOptions
+		}
+		
+		guard let activityViewController = self.activityViewController(forItem: newLoginAttributesDict, viewController: viewController, sender: sender, typeIdentifier: kUTTypeAppExtensionSaveLoginAction) else {
+			NSLog("Failed to get activityViewController")
+			completion?(nil, OnePasswordExtension.extensionCancelledByUserError())
+			return
+		}
+		
+		activityViewController.completionWithItemsHandler = { activityType, completed, returnedItems, activityError in
+			guard let returnedItems = returnedItems, returnedItems.isEmpty == false else {
+				let error: NSError
+				if let activityError = activityError as NSError? {
+					NSLog("Failed to storeLoginForURLString: \(activityError)")
+					error = OnePasswordExtension.failedToContactExtensionErrorWithActivityError(activityError: activityError)
+				} else {
+					error = OnePasswordExtension.extensionCancelledByUserError()
+				}
+				
+				completion?(nil, error)
+				return
+			}
+			
+			self.processExtensionItem(returnedItems.first as? NSExtensionItem) { (itemDictionary, error) in
+				completion?(itemDictionary, error)
+			}
+			
+		}
+		
+		viewController.present(activityViewController, animated: true, completion: nil)
 	}
 	
 	// MARK: - Change Password
@@ -169,7 +232,50 @@ final class OnePasswordExtension: NSObject {
 	 
 	 @param completion A completion block which is called with type parameters loginDictionary and error. The loginDictionary reply parameter which contain all the information about the newly updated Login, including the newly generated and the old password. Use the `Login Dictionary keys` above to extract the needed information and update your UI. For example, updating the UI with the newly generated password lets the user know their action was successful. The error reply parameter that is nil if the 1Password Extension has been successfully completed, or it contains error information about the completion failure.
 	 */
-	public func changePasswordForLogin(forURLString URLString: String, loginDetails loginDetailsDictionary: [AnyHashable : Any]?, passwordGenerationOptions: [AnyHashable : Any]?, for viewController: UIViewController?, sender: Any?, completion: OnePasswordLoginDictionaryCompletionBlock) {
+	public func changePasswordForLogin(forURLString URLString: String, loginDetails loginDetailsDictionary: [AnyHashable : Any], passwordGenerationOptions: [AnyHashable : Any]?, for viewController: UIViewController, sender: Any?, completion: OnePasswordLoginDictionaryCompletionBlock? = nil) {
+		
+		guard isSystemAppExtensionAPIAvailable() else {
+			NSLog("Failed to changePasswordForLoginWithUsername, system API is not available")
+			completion?(nil, OnePasswordExtension.systemAppExtensionAPINotAvailableError())
+			return
+		}
+		
+		let item = NSMutableDictionary()
+		item[AppExtensionVersionNumberKey] = VERSION_NUMBER
+		item[AppExtensionURLStringKey] = URLString
+		item.addEntries(from: loginDetailsDictionary)
+		
+		if let passwordGenerationOptions = passwordGenerationOptions, passwordGenerationOptions.isEmpty == false {
+			item[AppExtensionPasswordGeneratorOptionsKey] = passwordGenerationOptions
+		}
+		
+		guard let activityViewController = self.activityViewController(forItem: item, viewController: viewController, sender: sender, typeIdentifier: kUTTypeAppExtensionChangePasswordAction) else {
+			NSLog("Failed to get activityViewController")
+			completion?(nil, OnePasswordExtension.extensionCancelledByUserError())
+			return
+		}
+		
+		activityViewController.completionWithItemsHandler = { activityType, completed, returnedItems, activityError in
+			guard let returnedItems = returnedItems, returnedItems.isEmpty == false else {
+				let error: NSError
+				if let activityError = activityError as NSError? {
+					NSLog("Failed to changePasswordForLoginWithUsername: \(activityError)")
+					error = OnePasswordExtension.failedToContactExtensionErrorWithActivityError(activityError: activityError)
+				} else {
+					error = OnePasswordExtension.extensionCancelledByUserError()
+				}
+				
+				completion?(nil, error)
+				return
+			}
+			
+			self.processExtensionItem(returnedItems.first as? NSExtensionItem) { (itemDictionary, error) in
+				completion?(itemDictionary, error)
+			}
+			
+		}
+		
+		viewController.present(activityViewController, animated: true, completion: nil)
 	}
 	
 	// MARK: - Web View filling Support
@@ -192,7 +298,8 @@ final class OnePasswordExtension: NSObject {
 	 
 	 @param completion Completion block called on completion with parameters success, and error. The success reply parameter that is YES if the 1Password Extension has been successfully completed or NO otherwise. The error reply parameter that is nil if the 1Password Extension has been successfully completed, or it contains error information about the completion failure.
 	 */
-	public func fillItem(into webView: WKWebView, for viewController: UIViewController, sender: Any?, showOnlyLogins yesOrNo: Bool, completion: OnePasswordSuccessCompletionBlock) {
+	public func fillItem(into webView: WKWebView, for viewController: UIViewController, sender: Any?, showOnlyLogins yesOrNo: Bool, completion: @escaping OnePasswordSuccessCompletionBlock) {
+		fillItemWK(into: webView, for: viewController, sender: sender, showOnlyLogins: yesOrNo, completion: completion)
 	}
 	
 	// MARK: - Support for custom UIActivityViewControllers
@@ -205,7 +312,8 @@ final class OnePasswordExtension: NSObject {
 	 @return isOnePasswordExtensionActivityType Returns YES if the selected activity is the 1Password extension, NO otherwise.
 	 */
 	public func isOnePasswordExtension(activityType: String) -> Bool {
-		
+		"com.agilebits.onepassword-ios.extension" == activityType ||
+			"com.agilebits.beta.onepassword-ios.extension" == activityType
 	}
 	
 	/*!
@@ -215,8 +323,36 @@ final class OnePasswordExtension: NSObject {
 	 
 	 @param completion Completion block called on completion with extensionItem and error. The extensionItem reply parameter that is contains all the info required by the 1Password extension if has been successfully completed or nil otherwise. The error reply parameter that is nil if the 1Password extension item has been successfully created, or it contains error information about the completion failure.
 	 */
-	public func createExtensionItem(for webview: WKWebView, completion: OnePasswordExtensionItemCompletionBlock) {
+	public func createExtensionItem(for webview: WKWebView, completion: OnePasswordExtensionItemCompletionBlock? = nil) {
 		
+		let safeCompletion = { (completionError: NSError) in
+			if let completion = completion {
+				if Thread.isMainThread {
+					completion(nil, completionError)
+				} else {
+					OperationQueue.main.addOperation {
+						completion(nil, completionError)
+					}
+				}
+			}
+		}
+		
+		webview.evaluateJavaScript(OnePasswordExtension.OPWebViewCollectFieldsScript) { (result, evaluateError) in
+			guard let result = result,
+						let urlStringResult = result as? String,
+						let webViewURL = webview.url?.absoluteString
+			else {
+				let completionError: NSError = (evaluateError as NSError?) ?? NSError(domain: AppExtensionErrorDomain, code: 0)
+				NSLog("1Password Extension failed to collect web page fields: \(completionError)")
+				let failedToCollectFieldsError = OnePasswordExtension.failedToCollectFieldsErrorWithUnderlyingError(underlyingError: completionError)
+				safeCompletion(failedToCollectFieldsError)
+				return
+			}
+			
+			self.createExtensionItem(forURLString: webViewURL,
+													webPageDetails: urlStringResult,
+													completion: completion)
+		}
 	}
 	
 	/*!
@@ -227,59 +363,314 @@ final class OnePasswordExtension: NSObject {
 	 
 	 @param completion Completion block called on completion with parameters success, and error. The success reply parameter that is YES if the 1Password Extension has been successfully completed or NO otherwise. The error reply parameter that is nil if the 1Password Extension has been successfully completed, or it contains error information about the completion failure.
 	 */
-	public func fill(returnedItems: NSArray, into webView: WKWebView, completion: OnePasswordSuccessCompletionBlock) {
+	public func fill(returnedItems: NSArray, into webView: WKWebView, completion: OnePasswordSuccessCompletionBlock? = nil) {
+		guard returnedItems.count > 0 else {
+			let error = OnePasswordExtension.extensionCancelledByUserError()
+			completion?(false, error)
+			return
+		}
 		
+		processExtensionItem(returnedItems.firstObject as? NSExtensionItem) { (itemDictionary, error) in
+			guard let itemDictionary = itemDictionary, itemDictionary.count > 0,
+						let fillScript = itemDictionary[AppExtensionWebViewPageFillScript] as? String
+			else {
+				completion?(false, error)
+				return
+			}
+			
+			self.executeFillScript(fillScript, in: webView) { (success, executeFillScriptError) in
+				completion?(success, executeFillScriptError)
+			}
+		}
 	}
 	
-	// MARK - Private methods
+	// MARK: - Private methods
+	
 	private func isSystemAppExtensionAPIAvailable() -> Bool {
 		// This is always true in swift
 		return true //NSExtensionItem.self != nil
 	}
 	
-	private func findLoginIn1Password(withURLString URLString: String, collectedPageDetails: String?, forWebViewController forViewController: UIViewController, sender: Any?, with webView: WKWebView, showOnlyLogins yesOrNo: Bool, completion: OnePasswordSuccessCompletionBlock) {
+	private func findLoginIn1Password(withURLString URLString: String, collectedPageDetails: String?, forWebViewController forViewController: UIViewController, sender: Any?, with webView: WKWebView, showOnlyLogins yesOrNo: Bool, completion: @escaping OnePasswordSuccessCompletionBlock) {
+		
+		guard URLString.isEmpty == false,
+					let data = collectedPageDetails?.data(using: .utf8) else {
+			let urlStringError = OnePasswordExtension.failedToObtainURLStringFromWebViewError()
+			NSLog("Failed to findLoginIn1PasswordWithURLString: \(urlStringError)")
+			completion(false, urlStringError)
+			return
+		}
+		
+		let collectedPageDetailsDictionary: NSDictionary
+		do {
+			let collectedPageDetails = try JSONSerialization.jsonObject(with: data, options: .mutableContainers) as? NSDictionary
+			
+			guard let collectedPageDetailsDictionaryTemp = collectedPageDetails else {
+				throw NSError(domain: AppExtensionErrorDomain, code: AppExtensionErrorCode.unexpectedData.rawValue, userInfo: [NSLocalizedDescriptionKey : "Failed to parse JSON collected page details."])
+			}
+			
+			collectedPageDetailsDictionary = collectedPageDetailsDictionaryTemp
+		} catch let error as NSError {
+			NSLog("Failed to parse JSON collected page details: \(error)")
+			completion(false, error)
+			return
+		}
+		
+		let item: NSDictionary = [ AppExtensionVersionNumberKey : VERSION_NUMBER,
+																		 AppExtensionURLStringKey : URLString,
+																		 AppExtensionWebViewPageDetails : collectedPageDetailsDictionary]
+		
+		let typeIdentifier = yesOrNo ? kUTTypeAppExtensionFillWebViewAction  : kUTTypeAppExtensionFillBrowserAction
+		guard let activityViewController =
+			self.activityViewController(forItem: item,
+																	viewController: forViewController,
+																	sender: sender,
+																	typeIdentifier: typeIdentifier) else {
+			completion(false, OnePasswordExtension.extensionCancelledByUserError())
+			return
+		}
+		
+		activityViewController.completionWithItemsHandler = { [weak self] activityType, completed, returnedItems, activityError in
+			guard let self = self, returnedItems?.isEmpty == false else {
+				guard let activityError = activityError as NSError? else {
+					completion(false, OnePasswordExtension.extensionCancelledByUserError())
+					return
+				}
+				
+				completion(false, OnePasswordExtension.failedToContactExtensionErrorWithActivityError(activityError: activityError))
+				return
+			}
+			
+			self.processExtensionItem(returnedItems?.first as? NSExtensionItem) { (itemDictionary, processExtensionItemError) in
+				guard let itemDictionary = itemDictionary, itemDictionary.count > 0 else {
+					completion(false, processExtensionItemError)
+					return
+				}
+				
+				let fillScript = itemDictionary[AppExtensionWebViewPageFillScript] as? String
+				self.executeFillScript(fillScript, in: webView) { (succes, executeFillScriptError) in
+					completion(succes, executeFillScriptError)
+				}
+				
+			}
+			
+			
+		}
+		
+		forViewController.present(activityViewController, animated: true)
 	}
 
-	private func fillItemWK(into webView: WKWebView, for viewController: UIViewController, sender: Any?, showOnlyLogins yesOrNo: Bool, completion: OnePasswordSuccessCompletionBlock) {
+	private func fillItemWK(into webView: WKWebView, for viewController: UIViewController, sender: Any?, showOnlyLogins yesOrNo: Bool, completion: @escaping OnePasswordSuccessCompletionBlock) {
+		webView.evaluateJavaScript(OnePasswordExtension.OPWebViewCollectFieldsScript) { (result, error) in
+			guard let result = result as? String,
+						let webKitURL = webView.url?.absoluteString else {
+				let completionError = (error as NSError?) ?? NSError(domain: AppExtensionErrorDomain, code: AppExtensionErrorCode.collectFieldsScriptFailed.rawValue, userInfo: nil)
+				completion(false,
+									 OnePasswordExtension.failedToCollectFieldsErrorWithUnderlyingError(underlyingError: completionError))
+				return
+			}
+			
+			self.findLoginIn1Password(withURLString: webKitURL, collectedPageDetails: result, forWebViewController: viewController, sender: sender, with: webView, showOnlyLogins: yesOrNo) { (success, findLoginError) in
+				completion(success, findLoginError)
+			}
+		}
 	}
 
-	private func executeFillScript(_ fillScript: String?, in webView: WKWebView, completion: OnePasswordSuccessCompletionBlock) {
+	private func executeFillScript(_ fillScript: String?, in webView: WKWebView, completion: @escaping OnePasswordSuccessCompletionBlock) {
+		
+		guard let fillScript = fillScript else {
+			NSLog("Failed to executeFillScript, fillScript is missing")
+			completion(false, OnePasswordExtension.failedToFillFieldsErrorWithLocalizedErrorMessage(errorMessage: NSLocalizedString("Failed to fill web page because script is missing", tableName: "OnePasswordExtension", comment: "1Password Extension Error Message"), underlyingError: nil))
+			return
+		}
+		
+		let scriptSource = OnePasswordExtension.OPWebViewFillScript
+			.appendingFormat("(document, %@, undefined);", fillScript)
+
+		webView.evaluateJavaScript(scriptSource) { (result, evaluationError) in
+			var error = evaluationError as NSError?
+			let success = result != nil
+			
+			if success == false {
+				NSLog("Cannot executeFillScript, evaluateJavaScript failed: \(String(describing: evaluationError))")
+				error = OnePasswordExtension.failedToFillFieldsErrorWithLocalizedErrorMessage(errorMessage: NSLocalizedString("Failed to fill web page because script could not be evaluated", tableName: "OnePasswordExtension", comment: "1Password Extension Error Message"), underlyingError: evaluationError as NSError?)
+			}
+			
+			completion(success, error)
+		}
 	}
 
-	private func processExtensionItem(_ extensionItem: NSExtensionItem?, completion: OnePasswordLoginDictionaryCompletionBlock) {
+	private func processExtensionItem(_ extensionItem: NSExtensionItem?, completion: @escaping OnePasswordLoginDictionaryCompletionBlock) {
+		guard let extensionItem = extensionItem, extensionItem.attachments?.isEmpty == false else {
+			let userInfo = [ NSLocalizedDescriptionKey : "Unexpected data returned by App Extension: extension item had no attachments." ]
+			let error = NSError(domain: AppExtensionErrorDomain, code: AppExtensionErrorCode.unexpectedData.rawValue, userInfo: userInfo)
+			completion(nil, error)
+			return
+		}
+		
+		let itemProvider = extensionItem.attachments?.first
+		guard itemProvider?.hasItemConformingToTypeIdentifier(kUTTypePropertyList as String) != nil else {
+			let userInfo = [ NSLocalizedDescriptionKey: "Unexpected data returned by App Extension: extension item attachment does not conform to kUTTypePropertyList type identifier" ]
+			let error = NSError(domain: AppExtensionErrorDomain, code: AppExtensionErrorCode.unexpectedData.rawValue, userInfo: userInfo)
+			completion(nil, error)
+			return
+		}
+		
+		itemProvider?.loadItem(forTypeIdentifier: kUTTypePropertyList as String, options: nil, completionHandler: { (itemDictionaryEncoded, itemProviderError) in
+			var error: NSError?
+			
+			guard let itemDictionary = itemDictionaryEncoded as? NSDictionary,
+						itemDictionary.count > 0 else {
+				NSLog("Failed to loadItemForTypeIdentifier: \(String(describing: itemProviderError))")
+				error = OnePasswordExtension.failedToLoadItemProviderDataErrorWithUnderlyingError(underlyingError: itemProviderError as NSError?)
+				return
+			}
+			
+			if Thread.isMainThread {
+				completion(itemDictionary, error)
+			} else {
+				DispatchQueue.main.async {
+					completion(itemDictionary, error)
+				}
+			}
+			
+		})
 	}
 
-	private func activityViewController(forItem item: [AnyHashable : Any], viewController: UIViewController, sender: Any?, typeIdentifier: String) -> UIActivityViewController? {
+	private func activityViewController(forItem item: NSDictionary, viewController: UIViewController, sender: Any?, typeIdentifier: String) -> UIActivityViewController? {
+		precondition(false == (UIDevice.current.userInterfaceIdiom == .pad && sender == nil), "sender must not be nil on iPad.")
+		
+		let itemProvider = NSItemProvider(item: item, typeIdentifier: typeIdentifier)
+		let extensionItem  = NSExtensionItem()
+		extensionItem.attachments = [itemProvider]
+		
+		let controller = UIActivityViewController(activityItems: [extensionItem], applicationActivities: nil)
+		
+		if let barbuttonItem = sender as? UIBarButtonItem {
+			controller.popoverPresentationController?.barButtonItem = barbuttonItem
+		} else if let view = sender as? UIView {
+			controller.popoverPresentationController?.sourceView = view.superview
+			controller.popoverPresentationController?.sourceRect = view.frame
+		} else {
+			NSLog("sender can be nil on iPhone")
+		}
+		
+		return controller
 	}
 	
-	// MARK - Errors
+	private func createExtensionItem(forURLString urlString: String, webPageDetails: String, completion: OnePasswordExtensionItemCompletionBlock? = nil) {
+		
+		guard let data = webPageDetails.data(using: .utf8) else {
+			NSLog("Failed to parse JSON collected page details")
+			let error = NSError(domain: AppExtensionErrorDomain, code: AppExtensionErrorCode.unexpectedData.rawValue, userInfo: [NSLocalizedDescriptionKey : "Failed to get data"])
+			completion?(nil, error)
+			return
+		}
+		
+		let webPageDetailsDictionary: NSDictionary
+		do {
+			let webPageDetails = try JSONSerialization.jsonObject(with: data, options: .mutableContainers)
+			
+			guard let webPageDetailsDictionaryTemp = webPageDetails as? NSDictionary else {
+				let error = NSError(domain: AppExtensionErrorDomain, code: AppExtensionErrorCode.unexpectedData.rawValue, userInfo: [NSLocalizedDescriptionKey : "Failed to get data"])
+				throw error
+			}
+			
+			webPageDetailsDictionary = webPageDetailsDictionaryTemp
+		} catch let error as NSError {
+			NSLog("Failed to parse JSON collected page details: \(String(describing: error))")
+			completion?(nil, error)
+			return
+		}
+		
+		let item: NSDictionary = [AppExtensionVersionNumberKey : VERSION_NUMBER, AppExtensionURLStringKey : urlString, AppExtensionWebViewPageDetails : webPageDetailsDictionary]
+		
+		let itemProvider = NSItemProvider(item: item, typeIdentifier: kUTTypeAppExtensionFillBrowserAction)
+		let extensionItem = NSExtensionItem()
+		
+		if Thread.isMainThread {
+			completion?(extensionItem, nil)
+		} else {
+			DispatchQueue.main.async {
+				completion?(extensionItem, nil)
+			}
+		}
+	}
+	
+	// MARK: - Errors
 	
 	private static func systemAppExtensionAPINotAvailableError() -> NSError {
-		return NSError()
+		NSError(domain: AppExtensionErrorDomain,
+						code: AppExtensionErrorCode.apiNotAvailable.rawValue,
+						userInfo: [NSLocalizedDescriptionKey
+												: NSLocalizedString("App Extension API is not available in this version of iOS",
+																						tableName: "OnePasswordExtension",
+																						comment: "1Password Extension Error Message")])
 	}
 	
 	private static func extensionCancelledByUserError() -> NSError {
-		return NSError()
+		NSError(domain: AppExtensionErrorDomain,
+						code: AppExtensionErrorCode.cancelledByUser.rawValue,
+						userInfo: [NSLocalizedDescriptionKey
+												: NSLocalizedString("1Password Extension was cancelled by the user",
+																						tableName: "OnePasswordExtension",
+																						comment: "1Password Extension Error Message")])
 	}
 	
 	private static func failedToContactExtensionErrorWithActivityError(activityError: NSError) -> NSError {
-		return NSError()
+		NSError(domain: AppExtensionErrorDomain,
+						code: AppExtensionErrorCode.failedToContactExtension.rawValue,
+						userInfo: [NSLocalizedDescriptionKey
+												: NSLocalizedString("Failed to contact the 1Password Extension",
+																						tableName: "OnePasswordExtension",
+																						comment: "1Password Extension Error Message"),
+											 NSUnderlyingErrorKey : activityError])
 	}
 	
 	private static func failedToCollectFieldsErrorWithUnderlyingError(underlyingError: NSError) -> NSError {
-		return NSError()
+		NSError(domain: AppExtensionErrorDomain,
+						code: AppExtensionErrorCode.collectFieldsScriptFailed.rawValue,
+						userInfo: [NSLocalizedDescriptionKey
+												: NSLocalizedString("Failed to execute script that collects web page information",
+																						tableName: "OnePasswordExtension",
+																						comment: "1Password Extension Error Message"),
+											 NSUnderlyingErrorKey : underlyingError])
 	}
 	
-	private static func failedToFillFieldsErrorWithLocalizedErrorMessage(errorMessage: String, underlyingError: NSError) -> NSError {
-		return NSError()
+	private static func failedToFillFieldsErrorWithLocalizedErrorMessage(errorMessage: String, underlyingError: NSError?) -> NSError {
+		NSError(domain: AppExtensionErrorDomain,
+						code: AppExtensionErrorCode.fillFieldsScriptFailed.rawValue,
+						userInfo: {
+							var userInfo: [String: Any] = [
+								NSLocalizedDescriptionKey
+									: NSLocalizedString("Failed to execute script that collects web page information",
+																			tableName: "OnePasswordExtension",
+																			comment: "1Password Extension Error Message"),
+								NSLocalizedDescriptionKey : errorMessage]
+							userInfo[NSUnderlyingErrorKey] = underlyingError
+							return userInfo
+						}()
+		)
 	}
 	
-	private static func failedToLoadItemProviderDataErrorWithUnderlyingError(underlyingError: NSError) -> NSError {
-		return NSError()
+	private static func failedToLoadItemProviderDataErrorWithUnderlyingError(underlyingError: NSError?) -> NSError {
+		NSError(domain: AppExtensionErrorDomain,
+						code: AppExtensionErrorCode.failedToLoadItemProviderData.rawValue,
+						userInfo: [NSLocalizedDescriptionKey
+												: NSLocalizedString("Failed to parse information returned by 1Password Extension",
+																						tableName: "OnePasswordExtension",
+																						comment: "1Password Extension Error Message"),
+											 NSUnderlyingErrorKey : underlyingError as Any])
 	}
 	
 	private static func failedToObtainURLStringFromWebViewError() -> NSError {
-		return NSError()
+		NSError(domain: AppExtensionErrorDomain,
+						code: AppExtensionErrorCode.failedToObtainURLStringFromWebView.rawValue,
+						userInfo: [NSLocalizedDescriptionKey
+												: NSLocalizedString("Failed to obtain URL String from web view. The web view must be loaded completely when calling the 1Password Extension",
+																						tableName: "OnePasswordExtension",
+																						comment: "1Password Extension Error Message")
+						])
 	}
 	
 	private static let OPWebViewCollectFieldsScript = """
