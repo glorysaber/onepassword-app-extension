@@ -1,3 +1,7 @@
+# Fork Notes
+
+This is a fork of the onepassword AppExtension but converted to Swift. Currently the Swift is available in the branch Swift only.
+
 # 1Password App Extension
 
 [![CocoaPods](https://img.shields.io/cocoapods/l/1PasswordExtension.svg)](https://github.com/AgileBits/onepassword-app-extension/blob/master/LICENSE.txt)
